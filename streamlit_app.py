@@ -1,76 +1,184 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
 import joblib
-from pipeline import BinaryPipeline, MulticlassPipeline, MulticlassClassifier, ProbabilityExtractor, BinaryClassifier
+from datetime import datetime
 
-# Load the pre-trained pipeline
-pipeline = joblib.load('full_pipeline.joblib')
+# Load the trained model
+model = joblib.load('best_startup_status_model.joblib')
 
+# Set up the Streamlit app
+st.title('Startup Status Predictor')
 
-# Define the Streamlit app
-def main():
-    st.title("Startup Acquisition Status Prediction")
+st.write("""
+This app predicts the status of a startup based on key features.
+Please fill in the information below:
+""")
 
-    # Create a form to input features
-    with st.form("prediction_form"):
-        st.header("Enter the details of the startup:")
+# Create input fields for the most important features
+founded_at = st.number_input('Founded Year', min_value=1900, max_value=datetime.now().year, value=2000)
 
-        # Input fields for key features
-        founded_at = st.number_input('Founded At (Year):', min_value=1900, max_value=2024)
-        first_funding_at = st.number_input('First Funding At (Year):', min_value=1900, max_value=2024)
-        last_funding_at = st.number_input('Last Funding At (Year):', min_value=1900, max_value=2024)
-        funding_total_usd = st.number_input('Funding Total USD:', min_value=0.0)
+funding_total_usd = st.number_input('Total Funding (USD)', min_value=0, value=1000000)
 
-        # Country field as dropdown
-        country = st.selectbox('Country:', [
-            'USA', 'CAN', 'CHN', 'DEU', 'ESP', 'FRA', 'GBR', 'IND', 'IRL',
-            'ISR', 'NLD', 'RUS', 'SGP', 'SWE', 'Other'
-        ])
+funding_rounds = st.selectbox('Number of Funding Rounds', options=list(range(11)), index=1)
 
-        # Product feature field as dropdown
-        product = st.selectbox('Product:', [
-            'analytics', 'biotech', 'cleantech', 'ecommerce', 'enterprise',
-            'games_video', 'hardware', 'health', 'medical', 'mobile', 'other',
-            'social', 'software', 'web'
-        ])
+relationships = st.selectbox('Number of Relationships', options=list(range(21)), index=1)
 
-        # Submit button
-        submit = st.form_submit_button("Predict")
+# Dropdown for company category
+categories = ['analytics', 'biotech', 'cleantech', 'ecommerce', 'enterprise', 'games_video',
+              'hardware', 'health', 'medical', 'mobile', 'social', 'software', 'web', 'other']
+selected_category = st.selectbox('Select the primary category', options=categories)
 
-    if submit:
-        # Prepare the input data
-        input_data = {'founded_at': [founded_at], 'first_funding_at': [first_funding_at],
-                      'last_funding_at': [last_funding_at], 'funding_total_usd': [funding_total_usd],
-                      'last_milestone_at': [0], 'lat': [0.0], 'lng': [0.0], 'funding_rounds': [0], 'relationships': [0],
-                      'Age_in_Days': [0], 'milestones': [0], 'investment_rounds': [0], 'first_milestone_at': [0],
-                      'analytics': [False], 'biotech': [False], 'cleantech': [False], 'ecommerce': [False],
-                      'enterprise': [False], 'games_video': [False], 'hardware': [False], 'health': [False],
-                      'medical': [False], 'mobile': [False], 'other': [False], 'social': [False], 'software': [False],
-                      'web': [False], 'CAN': [False], 'CHN': [False], 'DEU': [False], 'ESP': [False], 'FRA': [False],
-                      'GBR': [False], 'IND': [False], 'IRL': [False], 'ISR': [False], 'NLD': [False], 'RUS': [False],
-                      'SGP': [False], 'SWE': [False], 'USA': [False], 'other.1': [False], country: [True],
-                      product: [True]}
+# Dropdown for country
+countries = ['USA', 'GBR', 'CAN', 'DEU', 'FRA', 'CHN', 'IND', 'ESP', 'IRL', 'ISR', 'NLD', 'RUS', 'SGP', 'SWE', 'Other']
+selected_country = st.selectbox('Select the country', options=countries)
 
-        # Set the correct country
+# Calculate Age_in_Days
+age_in_days = (datetime.now().year - founded_at) * 365
 
-        # Set the correct product feature
+# Prepare the input data
+input_data = {
+    'founded_at': founded_at,
+    'funding_total_usd': funding_total_usd,
+    'funding_rounds': funding_rounds,
+    'relationships': relationships,
+    'Age_in_Days': age_in_days
+}
 
-        # Convert to DataFrame
-        input_data_df = pd.DataFrame(input_data)
+# Add categorical features
+for category in categories:
+    input_data[category] = 1 if category == selected_category else 0
 
-        # Predict the acquisition status
-        prediction = pipeline.predict(input_data_df)
+# Add country features
+for country in ['USA', 'GBR', 'CAN', 'DEU', 'FRA', 'CHN', 'IND', 'ESP', 'IRL', 'ISR', 'NLD', 'RUS', 'SGP', 'SWE']:
+    input_data[country] = 1 if country == selected_country else 0
 
-        # Map the numerical prediction to actual labels
-        label_map = {0: 'Acquired', 1: 'Closed', 2: 'IPO', 3: 'Operating'}
-        prediction_label = label_map[prediction[0]]
+# Add other features that might be expected by the model but not collected here
+additional_features = ['investment_rounds', 'first_funding_at', 'last_funding_at',
+                       'first_milestone_at', 'last_milestone_at', 'milestones',
+                       'lat', 'lng', 'other.1']
+
+for feature in additional_features:
+    input_data[feature] = 0  # Set to 0 or another appropriate default value
+
+# Create a DataFrame from the input data
+input_df = pd.DataFrame([input_data])
+
+# Make prediction when the user clicks the button
+if st.button('Predict Status'):
+    try:
+        # Print column names for debugging
+        st.write("Input features:", input_df.columns.tolist())
+
+        # Make prediction
+        prediction = model.predict(input_df)
+
+        # Get the predicted status
+        status_mapping = {0: 'acquired', 1: 'closed', 2: 'ipo', 3: 'operating'}
+        predicted_status = status_mapping[prediction[0]]
 
         # Display the prediction
-        st.subheader(f"The predicted acquisition status is: {prediction_label}")
+        st.success(f'The predicted status of the company is: {predicted_status.upper()}')
+    except Exception as e:
+        st.error(f"An error occurred: {str(e)}")
+        st.error("Please make sure the model is compatible with the input data.")
+        st.write("Model expected features:", model.named_steps['preprocessor'].get_feature_names_out().tolist())
+
+# Add some information about the model and its usage
+st.info("""
+This model predicts the status of a startup based on key features including funding information, 
+relationships, company category, and location. The possible status outcomes are:
+- Acquired
+- Closed
+- IPO (Initial Public Offering)
+- Operating
+
+Please note that this is a predictive model and its accuracy may vary. The prediction should be used 
+as one of many factors in assessing a company's status.
+""")
 
 
-if __name__ == "__main__":
-    main()
+
+
+# import streamlit as st
+# import pandas as pd
+# import joblib
+#
+# from pipeline import BinaryPipeline, MulticlassPipeline, MulticlassClassifier, ProbabilityExtractor, BinaryClassifier
+#
+# # Load the pre-trained pipeline
+# pipeline = joblib.load('full_pipeline.joblib')
+#
+#
+# # Define the Streamlit app
+# def main():
+#     st.title("Startup Acquisition Status Prediction")
+#
+#     # Create a form to input features
+#     with st.form("prediction_form"):
+#         st.header("Enter the details of the startup:")
+#
+#         # Input fields for key features
+#         founded_at = st.number_input('Founded At (Year):', min_value=1900, max_value=2024)
+#         first_funding_at = st.number_input('First Funding At (Year):', min_value=1900, max_value=2024)
+#         last_funding_at = st.number_input('Last Funding At (Year):', min_value=1900, max_value=2024)
+#         funding_total_usd = st.number_input('Funding Total USD:', min_value=0.0)
+#
+#         # Country field as dropdown
+#         country = st.selectbox('Country:', [
+#             'USA', 'CAN', 'CHN', 'DEU', 'ESP', 'FRA', 'GBR', 'IND', 'IRL',
+#             'ISR', 'NLD', 'RUS', 'SGP', 'SWE', 'Other'
+#         ])
+#
+#         # Product feature field as dropdown
+#         product = st.selectbox('Product:', [
+#             'analytics', 'biotech', 'cleantech', 'ecommerce', 'enterprise',
+#             'games_video', 'hardware', 'health', 'medical', 'mobile', 'other',
+#             'social', 'software', 'web'
+#         ])
+#
+#         # Submit button
+#         submit = st.form_submit_button("Predict")
+#
+#     if submit:
+#         # Prepare the input data
+#         input_data = {'founded_at': [founded_at], 'first_funding_at': [first_funding_at],
+#                       'last_funding_at': [last_funding_at], 'funding_total_usd': [funding_total_usd],
+#                       'last_milestone_at': [0], 'lat': [0.0], 'lng': [0.0], 'funding_rounds': [0], 'relationships': [0],
+#                       'Age_in_Days': [0], 'milestones': [0], 'investment_rounds': [0], 'first_milestone_at': [0],
+#                       'analytics': [False], 'biotech': [False], 'cleantech': [False], 'ecommerce': [False],
+#                       'enterprise': [False], 'games_video': [False], 'hardware': [False], 'health': [False],
+#                       'medical': [False], 'mobile': [False], 'other': [False], 'social': [False], 'software': [False],
+#                       'web': [False], 'CAN': [False], 'CHN': [False], 'DEU': [False], 'ESP': [False], 'FRA': [False],
+#                       'GBR': [False], 'IND': [False], 'IRL': [False], 'ISR': [False], 'NLD': [False], 'RUS': [False],
+#                       'SGP': [False], 'SWE': [False], 'USA': [False], 'other.1': [False], country: [True],
+#                       product: [True]}
+#
+#         # Set the correct country
+#
+#         # Set the correct product feature
+#
+#         # Convert to DataFrame
+#         input_data_df = pd.DataFrame(input_data)
+#
+#         # Predict the acquisition status
+#         prediction = pipeline.predict(input_data_df)
+#
+#         # Map the numerical prediction to actual labels
+#         label_map = {0: 'Acquired', 1: 'Closed', 2: 'IPO', 3: 'Operating'}
+#         prediction_label = label_map[prediction[0]]
+#
+#         # Display the prediction
+#         st.subheader(f"The predicted acquisition status is: {prediction_label}")
+#
+#
+# if __name__ == "__main__":
+#     main()
+
+
+
+
+
 
 # import streamlit as st
 # import pandas as pd
