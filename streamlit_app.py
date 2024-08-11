@@ -88,10 +88,6 @@ company category, and location. The possible status outcomes are:
 - Closed
 - IPO (Initial Public Offering)
 - Operating
-
-Please note that this is a simplified estimation model and its accuracy may vary. The predictions should be used 
-as one of many factors in assessing a company's status. For more accurate predictions, consult with financial experts 
-or use more sophisticated predictive models.
 """)
 
 
